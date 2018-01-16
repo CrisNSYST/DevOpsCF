@@ -1,13 +1,6 @@
 #!/bin/bash
 # This script deploys BOSH to AWS using BOSH Bootloader
 
-# Run this script from Linux machine
-
-# IP: 54.244.61.60
-# user: ubuntu
-# key: ~/.ssh/lx-oregon.pem
-# ssh -i ~/.ssh/lx-oregon.pem ubuntu@54.244.61.60
-
 # Update packages to the latest versions
 sudo apt-get update
 sudo apt-get upgrade
