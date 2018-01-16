@@ -36,7 +36,8 @@ bbl lbs
 bosh upload-stemcell https://bosh.io/d/stemcells/bosh-aws-xen-hvm-ubuntu-trusty-go_agent?v=3468.17
 
 # Clone cf-deployment locally
-git clone https://github.com/cloudfoundry/cf-deployment.git && cd cf-deployment
+git clone https://github.com/cloudfoundry/cf-deployment.git
+cd cf-deployment
 
 # Set system domain in deployment variables
 echo "system_domain: cf.altoros.cf" > cf-deployment-vars.yml
