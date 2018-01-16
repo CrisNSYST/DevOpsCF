@@ -70,6 +70,7 @@ aws iam create-access-key --user-name bbl-user
 #     }
 # }
 
+# Be sure you choose the proper values from above
 export AWS_ACCESS_KEY="AKI.."
 export AWS_SECRET_KEY="eOt.."
 
