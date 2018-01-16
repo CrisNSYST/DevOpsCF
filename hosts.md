@@ -1,4 +1,4 @@
-# Control Plane Jumpboxes
+# Control Plane Jumpboxes and AWS Creds
 
 ````
 Who         Control Plane Jumpbox                                AWS Username              AWS Password
