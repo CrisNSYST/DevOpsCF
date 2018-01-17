@@ -8,10 +8,10 @@
 
 mkdir ssl
 openssl req \
-    -newkey rsa:2048 -nodes -keyout ssl/cf  .altoros.cf.key \
-    -out ssl/cf.altoros.cf.crt \
+    -newkey rsa:2048 -nodes -keyout ssl/cf04.altoros.com.key \
+    -out ssl/cf04.altoros.com.crt \
     -sha256 \
-    -subj "/C=CA/ST=Ontario/L=Toronto/O=Altoros/CN=*.cf.altoros.cf" \
+    -subj "/C=CA/ST=Ontario/L=Toronto/O=Altoros/CN=*.cf04.altoros.com" \
     -x509 -days 365
 
 # Now create load balancers for HTTP(S), SSH and TCP traffic
@@ -21,8 +21,8 @@ bbl create-lbs \
   --aws-access-key-id $AWS_ACCESS_KEY \
   --aws-secret-access-key $AWS_SECRET_KEY \
   --type cf \
-  --cert ssl/cf.altoros.cf.crt \
-  --key ssl/cf.altoros.cf.key
+  --cert ssl/cf04.altoros.com.crt \
+  --key ssl/cf04.altoros.com.key
 
 # Now point your DNS name to loadbalancers (external action)
 # *.cf => HTTP(S)
@@ -40,7 +40,7 @@ git clone https://github.com/cloudfoundry/cf-deployment.git
 cd cf-deployment
 
 # Set system domain in deployment variables
-echo "system_domain: cf.altoros.cf" > cf-deployment-vars.yml
+echo "system_domain: cf04.altoros.com" > cf-deployment-vars.yml
 
 # Interpolate the manifest with variables and operations to verify its
 # correctness
