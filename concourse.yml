@@ -1,0 +1,305 @@
+---
+name: ((deployment_name))
+
+releases:
+- name: concourse
+  version: "3.5.0"
+- name: garden-runc
+  version: "1.9.3"
+- name: postgres
+  version: 20
+- name: credhub
+  version: "1.3.2"
+- name: uaa
+  version: "50"
+- name: cacerts
+  version: latest
+
+variables:
+- name: atc-db-password
+  type: password
+- name: credhub-encryption-password
+  type: password
+  options:
+    length: 40
+- name: atc-ca
+  type: certificate
+  options:
+    is_ca: true
+    common_name: ATC CA
+- name: atc-tls
+  type: certificate
+  options:
+    ca: atc-ca
+    common_name: ((external-ip-address))
+    alternative_names:
+    - ((external-ip-address))
+    - ((internal-ip-address))
+    - 127.0.0.1
+- name: credhub-mtls-ca
+  type: certificate
+  options:
+    is_ca: true
+    common_name: CredHub Mutual Auth CA
+- name: credhub-ca
+  type: certificate
+  options:
+    is_ca: true
+    common_name: CredHub CA
+- name: credhub-tls
+  type: certificate
+  options:
+    ca: credhub-ca
+    common_name: ((external-ip-address))
+    alternative_names:
+    - ((external-ip-address))
+    - ((internal-ip-address))
+    - 127.0.0.1
+- name: credhub-db-password
+  type: password
+- name: uaa-tls
+  type: certificate
+  options:
+    ca: credhub-ca
+    common_name: ((external-ip-address))
+    alternative_names:
+    - ((external-ip-address))
+- name: uaa-jwt
+  type: rsa
+  options:
+    key_length: 4096
+- name: uaa-users-admin
+  type: password
+- name: uaa-admin
+  type: password
+- name: uaa-login
+  type: password
+- name: uaa-credhub-admin
+  type: password
+- name: uaa-db-admin
+  type: password
+- name: uaa-db-password
+  type: password
+- name: concourse_to_credhub_secret
+  type: password
+- name: credhub_cli_password
+  type: password
+- name: concourse_client_secret
+  type: password
+- name: main-team-password
+  type: password
+
+instance_groups:
+- name: db
+  instances: 1
+  networks:
+  - name: default
+    static_ips: [((db-ip-address))]
+  persistent_disk: 10240
+  vm_type: small-highmem
+  azs: [z1]
+  stemcell: trusty
+  jobs:
+  - name: postgres
+    release: postgres
+    properties:
+      databases:
+        port: 5432
+        databases:
+        - name: atc
+        - name: credhub
+        - name: uaa
+        roles:
+        - name: atc
+          password: ((atc-db-password))
+        - name: credhub
+          password: ((credhub-db-password))
+        - name: uaa
+          password: ((uaa-db-password))
+- name: web
+  instances: 1
+  networks:
+  - name: default
+    static_ips: [((internal-ip-address))]
+  persistent_disk: 10240
+  vm_type: small-highmem
+  azs: [z1]
+  stemcell: trusty
+  jobs:
+  - name: add-ca-certs
+    release: cacerts
+    properties:
+      ca_certs:
+      - ((uaa-tls.ca))
+
+  - name: uaa
+    release: uaa
+    properties:
+      uaa:
+        ldap:
+          enabled: true
+          url: ldaps://10.0.2.17:636
+          userDnPattern: 'cn={0},cn=Users,dc=example,dc=com'
+          userDN: "cn=Mike Jacobi,cn=Users,dc=example,dc=com"
+          userPassword: StrongPass123
+          searchBase: "cn=Users,dc=example,dc=com"
+          # TLS support may require more tweaking
+          sslCertificate: ((ldap-ca-cert))
+          ssl:
+            ssl.tls: simple
+          groups:
+            profile_type: groups-as-scopes
+            searchBase: "cn=Users,dc=example,dc=com"
+            groupRoleAttribute: cn
+        url: &uaa-url "https://((external-ip-address)):8443"
+        port: -1
+        scim:
+          users:
+          - name: admin
+            password: ((uaa-users-admin))
+            groups:
+            - scim.write
+            - scim.read
+        clients:
+          credhub_cli:
+            override: true
+            authorized-grant-types: password,refresh_token
+            scope: credhub.read,credhub.write
+            authorities: ""
+            access-token-validity: 30
+            refresh-token-validity: 3600
+            secret: ""
+          concourse_to_credhub:
+            override: true
+            authorized-grant-types: client_credentials
+            scope: ""
+            authorities: credhub.read,credhub.write
+            access-token-validity: 30
+            refresh-token-validity: 3600
+            secret: ((concourse_to_credhub_secret))
+          concourse:
+            id: concourse
+            secret: ((concourse_client_secret))
+            scope: "*"
+            authorized-grant-types: "authorization_code,refresh_token"
+            access-token-validity: 3600
+            refresh-token-validity: 3600
+            redirect-uri: https://((external-ip-address)):4443/auth/oauth/callback
+        admin: {client_secret: ((uaa-admin))}
+        login: {client_secret: ((uaa-login))}
+        zones: {internal: {hostnames: []}}
+        sslCertificate: ((uaa-tls.certificate))
+        sslPrivateKey: ((uaa-tls.private_key))
+        jwt:
+          revocable: true
+          policy:
+            active_key_id: key-1
+            keys:
+              key-1:
+                signingKey: ((uaa-jwt.private_key))
+      uaadb:
+        address: ((db-ip-address))
+        port: 5432
+        db_scheme: postgresql
+        databases:
+        - tag: uaa
+          name: uaa
+        roles:
+        - tag: admin
+          name: uaa
+          password: ((uaa-db-password))
+      login:
+        saml:
+          serviceProviderCertificate: ((uaa-tls.certificate))
+          serviceProviderKey: ((uaa-tls.private_key))
+          serviceProviderKeyPassword: ""
+
+  - name: credhub
+    release: credhub
+    properties:
+      credhub:
+        port: 8844
+        authentication:
+          uaa:
+            url: *uaa-url
+            verification_key: ((uaa-jwt.public_key))
+            ca_certs:
+            - ((uaa-tls.ca))
+          mutual_tls:
+            trusted_cas:
+            - ((credhub-mtls-ca.certificate))
+        data_storage:
+          type: postgres
+          host: ((db-ip-address))
+          port: 5432
+          username: credhub
+          password: ((credhub-db-password))
+          database: credhub
+          require_tls: false
+        tls: ((credhub-tls))
+        log_level: info
+        encryption:
+          keys:
+          - provider_name: int
+            encryption_password: ((credhub-encryption-password))
+            active: true
+          providers:
+          - name: int
+            type: internal
+
+  - name: atc
+    release: concourse
+    properties:
+      credhub:
+        url: https://localhost:8844
+        tls:
+          ca_cert: ((credhub-ca))
+        client_id: concourse_to_credhub
+        client_secret: ((concourse_to_credhub_secret))
+      log_level: debug
+
+      external_url: https://((external-ip-address)):4443
+
+      postgresql:
+        database: atc
+        role:
+          name: atc
+          password: ((atc-db-password))
+
+      basic_auth_username: admin
+      basic_auth_password: ((main-team-password))
+      tls_cert: ((atc-tls.certificate))
+      tls_key: ((atc-tls.private_key))
+
+  - name: tsa
+    release: concourse
+    properties: {log_level: debug}
+
+  - name: groundcrew
+    release: concourse
+    properties: {drain_timeout: 10m}
+
+  - name: baggageclaim
+    release: concourse
+    properties: {log_level: debug}
+
+  - name: garden
+    release: garden-runc
+    properties:
+      garden:
+        listen_network: tcp
+        listen_address: 0.0.0.0:7777
+        allow_host_access: true
+
+
+stemcells:
+- alias: trusty
+  os: ubuntu-trusty
+  version: latest
+
+update:
+  canaries: 1
+  max_in_flight: 3
+  serial: false
+  canary_watch_time: 1000-90000
+  update_watch_time: 1000-90000
